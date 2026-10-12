@@ -40,6 +40,11 @@ jobs:
             echo "## lib 内容"
             ls -la dl/lib 2>/dev/null | head -50 || echo "(无 lib)"
             echo
+            echo "## 总体积"
+            du -sh dl dl/bin dl/lib 2>/dev/null || true
+            echo "## 最大的 10 个文件"
+            find dl -type f -printf '%s %p\n' 2>/dev/null | sort -rn | head -10 | awk '{printf "%.1f MB  %s\n", $1/1048576, $2}'
+            echo
             echo "## ELF 架构校验"
             for f in dl/bin/*; do
               [ -f "$f" ] || continue
@@ -75,6 +80,13 @@ jobs:
           raw = open('REPORT.md','rb').read()
           payload = {'message': 'docs: terminal package verification report',
                      'content': base64.b64encode(raw).decode(), 'branch': 'main'}
+          try:
+              g = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/TERMINAL-MANIFEST.md')
+              g.add_header('Authorization', 'Bearer '+tok); g.add_header('User-Agent','verify')
+              with urllib.request.urlopen(g, timeout=120) as gr:
+                  payload['sha'] = json.load(gr).get('sha')
+          except Exception:
+              pass
           req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/TERMINAL-MANIFEST.md', method='PUT')
           req.add_header('Authorization', 'Bearer '+tok)
           req.add_header('Accept', 'application/vnd.github+json')
