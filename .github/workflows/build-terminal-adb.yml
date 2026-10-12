@@ -144,8 +144,13 @@ jobs:
       - name: 整理成终端运行包
         env:
           HTP_ARCH: ${{ inputs.htp_arch || 'all' }}
+          PROFILE: ${{ inputs.profile || 'slim' }}
+          KEEP_OPENCL: ${{ inputs.keep_opencl || 'true' }}
         run: |
           set -euo pipefail
+          export KEEP_TOOLS=false
+          if [ "$PROFILE" = "slim" ]; then export KEEP_TOOLS=true; fi
+          if [ "$KEEP_OPENCL" = "true" ]; then export FORCE_KEEP_OPENCL=1; fi
           bash builder/scripts/make_terminal_pkg.sh pkg/llama.cpp out "$HTP_ARCH"
 
       - name: 校验可执行文件是 Android arm64
