@@ -1,0 +1,90 @@
+name: verify-terminal-pkg
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: '终端版构建 run id'
+        required: true
+        default: '38277442782'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: 下载终端包
+        uses: actions/download-artifact@v6
+        with:
+          name: llama-hexagon-terminal-arm64
+          run-id: ${{ inputs.run_id }}
+          path: dl
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 列出内容并校验 ELF
+        run: |
+          set -euo pipefail
+          {
+            echo "# 终端包内容验证 (run ${{ inputs.run_id }})"
+            echo
+            echo "## 目录树"
+            find dl -maxdepth 3 | sort | head -80
+            echo
+            echo "## bin 内容"
+            ls -la dl/bin 2>/dev/null || echo "(无 bin)"
+            echo
+            echo "## lib 内容"
+            ls -la dl/lib 2>/dev/null | head -50 || echo "(无 lib)"
+            echo
+            echo "## ELF 架构校验"
+            for f in dl/bin/*; do
+              [ -f "$f" ] || continue
+              echo "--- $(basename "$f") ---"
+              readelf -h "$f" 2>/dev/null | grep -E 'Class:|Machine:|Type:' || true
+            done
+            echo
+            echo "## 缺失依赖检查"
+            for f in dl/bin/*; do
+              [ -f "$f" ] || continue
+              for need in $(readelf -d "$f" 2>/dev/null | grep -o 'NEEDED.*\[.*\]' | sed 's/.*\[//;s/\]//'); do
+                if [ -e "dl/lib/$need" ]; then
+                  echo "OK   $(basename "$f") -> $need"
+                else
+                  echo "MISS $(basename "$f") -> $need"
+                fi
+              done
+            done
+          } > REPORT.md 2>&1
+          cat REPORT.md
+
+      - name: 上传报告
+        uses: actions/upload-artifact@v6
+        with:
+          name: terminal-pkg-report
+          path: REPORT.md
+
+      - name: 写回仓库
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          tok = os.environ['GITHUB_TOKEN']; repo = os.environ['GITHUB_REPOSITORY']
+          raw = open('REPORT.md','rb').read()
+          payload = {'message': 'docs: terminal package verification report',
+                     'content': base64.b64encode(raw).decode(), 'branch': 'main'}
+          req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/TERMINAL-MANIFEST.md', method='PUT')
+          req.add_header('Authorization', 'Bearer '+tok)
+          req.add_header('Accept', 'application/vnd.github+json')
+          req.add_header('Content-Type', 'application/json')
+          req.add_header('User-Agent', 'verify')
+          try:
+              with urllib.request.urlopen(req, json.dumps(payload).encode(), timeout=300) as r:
+                  print('writeback ok', r.status)
+          except Exception as e:
+              print('writeback failed', repr(e)[:500])
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
