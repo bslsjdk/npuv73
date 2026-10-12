@@ -86,7 +86,14 @@ def needed(p):
             out_.append(line.split('[',1)[1].rstrip(']').strip())
     return out_
 
-used = set()
+# 这些是运行时 dlopen 的后端插件 / 必需运行时，readelf 扫不到依赖，必须强制保留
+FORCE = set()
+for f in sorted(os.listdir(libd)):
+    if f.startswith('libggml-htp-') or f.startswith('libggml-') or f == 'libc++_shared.so':
+        FORCE.add(f)
+used |= FORCE
+
+used = set(used)
 frontier = []
 for f in sorted(os.listdir(bind)):
     p = os.path.join(bind, f)
