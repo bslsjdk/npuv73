@@ -142,6 +142,40 @@ jobs:
           echo "=== 各文件大小 ==="
           du -ah out/jniLibs/arm64-v8a/* 2>/dev/null || true
 
+      - name: 写回产物清单到仓库
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          tok = os.environ['GITHUB_TOKEN']; repo = os.environ['GITHUB_REPOSITORY']
+          lines = ["# 构建产物清单 (run ${GITHUB_RUN_ID})", "", "## jniLibs/arm64-v8a", ""]
+          jd = 'out/jniLibs/arm64-v8a'
+          if os.path.isdir(jd):
+              for f in sorted(os.listdir(jd)):
+                  p = os.path.join(jd, f)
+                  lines.append(f"- {f}  ({os.path.getsize(p)} bytes)")
+          else:
+              lines.append("(缺失)")
+          for sub in ('include', 'bin'):
+              lines += ["", f"## {sub}", ""]
+              p = os.path.join('out', sub)
+              if os.path.isdir(p):
+                  for f in sorted(os.listdir(p))[:40]:
+                      lines.append(f"- {f}")
+          raw = "\n".join(lines).encode()
+          payload = {'message': 'docs: refresh artifact manifest', 'content': base64.b64encode(raw).decode(), 'branch': 'main'}
+          req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/MANIFEST.md', method='PUT')
+          req.add_header('Authorization', 'Bearer '+tok)
+          req.add_header('Accept', 'application/vnd.github+json')
+          req.add_header('Content-Type', 'application/json')
+          req.add_header('User-Agent', 'manifest')
+          try:
+              with urllib.request.urlopen(req, json.dumps(payload).encode(), timeout=300) as r: print('ok', r.status)
+          except Exception as e: print('failed', e)
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 上传编译产物
         uses: actions/upload-artifact@v6
         with:
