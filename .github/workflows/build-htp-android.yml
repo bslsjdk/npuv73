@@ -164,14 +164,24 @@ jobs:
                       lines.append(f"- {f}")
           raw = "\n".join(lines).encode()
           payload = {'message': 'docs: refresh artifact manifest', 'content': base64.b64encode(raw).decode(), 'branch': 'main'}
-          req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/MANIFEST.md', method='PUT')
-          req.add_header('Authorization', 'Bearer '+tok)
-          req.add_header('Accept', 'application/vnd.github+json')
-          req.add_header('Content-Type', 'application/json')
-          req.add_header('User-Agent', 'manifest')
           try:
+              cur = None
+              try:
+                  g = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/MANIFEST.md')
+                  g.add_header('Authorization','Bearer '+tok)
+                  g.add_header('User-Agent','manifest')
+                  with urllib.request.urlopen(g, timeout=120) as gr:
+                      cur = json.load(gr).get('sha')
+              except Exception:
+                  cur = None
+              if cur: payload['sha'] = cur
+              req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/MANIFEST.md', method='PUT')
+              req.add_header('Authorization', 'Bearer '+tok)
+              req.add_header('Accept','application/vnd.github+json')
+              req.add_header('Content-Type','application/json')
+              req.add_header('User-Agent','manifest')
               with urllib.request.urlopen(req, json.dumps(payload).encode(), timeout=300) as r: print('ok', r.status)
-          except Exception as e: print('failed', e)
+          except Exception as e: print('failed', repr(e))
           PY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
