@@ -1,0 +1,151 @@
+name: Build llama.cpp Hexagon HTP (Android arm64-v8a)
+
+# ============================================================
+# 用高通官方工具链容器编译 llama.cpp 的 Hexagon NPU(HTP)后端
+# 产物：可直接塞进 Android 工程 jniLibs/arm64-v8a/ 的 .so + 头文件
+#
+# 原理：容器 ghcr.io/snapdragon-toolchain/arm64-android:v0.7 里
+# 已经预装好 Android NDK r28b、Hexagon SDK 6.6.0.0、OpenCL SDK、
+# CMake 和 hexagon-clang，所以不需要你手动申请高通账号下载 SDK。
+# ============================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      llama_ref:
+        description: 'llama.cpp 源码版本（分支 / tag / commit sha）'
+        required: true
+        default: 'master'
+        type: string
+      htp_arch:
+        description: '保留哪些 HTP 架构固件库（建议先选 all 拿到全套）'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - v73
+          - all
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-htp-android.yml'
+      - 'scripts/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: htp-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+
+    # 关键：整个 job 跑在高通工具链容器里
+    container:
+      image: 'ghcr.io/snapdragon-toolchain/arm64-android:v0.7'
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: 打印工具链版本
+        run: |
+          echo "=== 容器内工具链 ==="
+          echo "ANDROID_NDK_ROOT    = ${ANDROID_NDK_ROOT:-<未设置>}"
+          echo "HEXAGON_SDK_ROOT    = ${HEXAGON_SDK_ROOT:-<未设置>}"
+          echo "HEXAGON_TOOLS_ROOT  = ${HEXAGON_TOOLS_ROOT:-<未设置>}"
+          cmake --version | head -1
+          ls -d /opt/* 2>/dev/null || true
+
+      - name: 拉取本仓库的构建脚本
+        uses: actions/checkout@v6
+        with:
+          path: builder
+
+      - name: 拉取 llama.cpp 源码
+        env:
+          LLAMA_REF: ${{ inputs.llama_ref || 'master' }}
+        run: |
+          set -euo pipefail
+          mkdir -p llama.cpp
+          cd llama.cpp
+          git init -q .
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          # fetch 支持 branch / tag / commit sha 三种形式
+          git fetch --depth 1 origin "$LLAMA_REF"
+          git checkout -q FETCH_HEAD
+          echo "已签出 llama.cpp @ $(git rev-parse HEAD)"
+          cd ..
+
+      - name: 配置 CMake (Hexagon + OpenCL + CPU)
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'release' }}
+        run: |
+          set -euo pipefail
+          cd llama.cpp
+          # 新旧版本 preset 路径不同，做兼容
+          if [ -f docs/backend/snapdragon/CMakeUserPresets.json ]; then
+            cp docs/backend/snapdragon/CMakeUserPresets.json .
+            PRESET="arm64-android-snapdragon-${BUILD_TYPE}"
+          elif [ -f docs/backend/hexagon/CMakeUserPresets.json ]; then
+            cp docs/backend/hexagon/CMakeUserPresets.json .
+            PRESET="arm64-android-snapdragon-${BUILD_TYPE}"
+          else
+            echo "::error::找不到 CMakeUserPresets.json，请检查 llama.cpp 版本"
+            exit 1
+          fi
+          echo "使用 preset: $PRESET"
+          cmake --preset "$PRESET" -B build
+          cd ..
+
+      - name: 编译 (ARM 侧 + DSP 侧 htp-vXX)
+        run: |
+          set -euo pipefail
+          cd llama.cpp
+          cmake --build build -j "$(nproc)"
+          cd ..
+
+      - name: 安装产物
+        run: |
+          set -euo pipefail
+          cd llama.cpp
+          cmake --install build --prefix ../pkg/llama.cpp
+          cd ..
+          echo "=== 产出的 .so ==="
+          ls -lh pkg/llama.cpp/lib/*.so 2>/dev/null || true
+
+      - name: 整理成 Android jniLibs 结构
+        env:
+          HTP_ARCH: ${{ inputs.htp_arch || 'all' }}
+        run: |
+          set -euo pipefail
+          bash builder/scripts/make_jniLibs.sh "pkg/llama.cpp" "out" "$HTP_ARCH"
+
+      - name: 展示最终产物清单
+        run: |
+          echo "=== out/ 目录结构 ==="
+          find out -type f | sort
+          echo
+          echo "=== 各文件大小 ==="
+          du -ah out/jniLibs/arm64-v8a/* 2>/dev/null || true
+
+      - name: 上传编译产物
+        uses: actions/upload-artifact@v6
+        with:
+          name: llama-hexagon-android-arm64
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
