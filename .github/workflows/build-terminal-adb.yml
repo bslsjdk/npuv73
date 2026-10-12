@@ -151,7 +151,40 @@ jobs:
           export KEEP_TOOLS=false
           if [ "$PROFILE" = "slim" ]; then export KEEP_TOOLS=true; fi
           if [ "$KEEP_OPENCL" = "true" ]; then export FORCE_KEEP_OPENCL=1; fi
-          bash builder/scripts/make_terminal_pkg.sh pkg/llama.cpp out "$HTP_ARCH"
+          bash builder/scripts/make_terminal_pkg.sh pkg/llama.cpp out "$HTP_ARCH" > pkg.log 2>&1 \
+            || { echo "整理步骤失败，日志如下:"; cat pkg.log; exit 1; }
+          cat pkg.log
+
+      - name: 回传整理日志
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          tok = os.environ['GITHUB_TOKEN']; repo = os.environ['GITHUB_REPOSITORY']
+          if not os.path.exists('pkg.log'):
+              print('no pkg.log'); raise SystemExit(0)
+          raw = open('pkg.log','rb').read()[:200000]
+          payload = {'message': 'ci: packaging log', 'content': base64.b64encode(raw).decode(), 'branch': 'main'}
+          try:
+              g = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/PKG-LOG.txt')
+              g.add_header('Authorization','Bearer '+tok); g.add_header('User-Agent','p')
+              with urllib.request.urlopen(g, timeout=120) as gr:
+                  payload['sha'] = json.load(gr).get('sha')
+          except Exception:
+              pass
+          req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/PKG-LOG.txt', method='PUT')
+          req.add_header('Authorization','Bearer '+tok)
+          req.add_header('Accept','application/vnd.github+json')
+          req.add_header('Content-Type','application/json')
+          req.add_header('User-Agent','p')
+          try:
+              with urllib.request.urlopen(req, json.dumps(payload).encode(), timeout=300) as r:
+                  print('log ok', r.status)
+          except Exception as e:
+              print('log failed', repr(e)[:400])
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 校验可执行文件是 Android arm64
         run: |
