@@ -1,0 +1,67 @@
+name: list-artifact-contents
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: '要检查的构建运行 ID'
+        required: true
+        default: '38268201031'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  list:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: 下载上次构建产物
+        uses: actions/download-artifact@v6
+        with:
+          name: llama-hexagon-android-arm64
+          run-id: ${{ inputs.run_id }}
+          path: out
+        continue-on-error: true
+
+      - name: 生成清单
+        run: |
+          {
+            echo "# 构建产物清单 (run ${{ inputs.run_id }})"
+            echo
+            echo "## jniLibs/arm64-v8a"
+            ls -lh out/jniLibs/arm64-v8a/ 2>/dev/null || echo "(缺失)"
+            echo
+            echo "## include"
+            ls out/include/ 2>/dev/null | head -40
+            echo
+            echo "## bin"
+            ls out/bin/ 2>/dev/null | head -30
+            echo
+            echo "## 所有 .so 的 ELF 架构"
+            for f in out/jniLibs/arm64-v8a/*.so; do
+              [ -e "$f" ] || continue
+              echo "$(basename "$f") -> $(readelf -h "$f" 2>/dev/null | grep -E 'Machine|Class' | tr -s ' ' | tr '\n' ' ')"
+            done
+          } > MANIFEST.md
+          cat MANIFEST.md
+
+      - name: 写回仓库
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          tok = os.environ['GITHUB_TOKEN']; repo = os.environ['GITHUB_REPOSITORY']
+          raw = open('MANIFEST.md','rb').read()
+          payload = {'message':'docs: artifact manifest','content':base64.b64encode(raw).decode(),'branch':'main'}
+          req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/MANIFEST.md', method='PUT')
+          req.add_header('Authorization','Bearer '+tok)
+          req.add_header('Accept','application/vnd.github+json')
+          req.add_header('Content-Type','application/json')
+          req.add_header('User-Agent','manifest')
+          try:
+              with urllib.request.urlopen(req, json.dumps(payload).encode(), timeout=300) as r: print('ok', r.status)
+          except Exception as e: print('failed', e)
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
