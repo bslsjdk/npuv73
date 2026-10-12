@@ -1,0 +1,184 @@
+name: Build llama.cpp 终端版 (adb / Termux 可直接跑)
+
+# ============================================================
+# 目标：先做「能在手机终端里跑起来」的版本，用来验证 Hexagon NPU
+#      在 SM8635 上稳不稳，再谈移植进 APK。
+#
+# 产出：
+#   bin/llama-cli、llama-bench、llama-server…（Android arm64 可执行文件）
+#   lib/*.so（含 libggml-hexagon.so + libggml-htp-vXX.so）
+#   run.sh / check-npu.sh（一键自检）
+#
+# 用法：adb push 到手机 → adb shell → ./run.sh llama-cli -m x.gguf
+# ============================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      llama_ref:
+        description: 'llama.cpp 版本（分支 / tag / commit）'
+        required: true
+        default: 'master'
+        type: string
+      htp_arch:
+        description: 'HTP 架构固件库'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - v73
+          - v75
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terminal-adb-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    container:
+      image: 'ghcr.io/snapdragon-toolchain/arm64-android:v0.7'
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: 拉取本仓库脚本
+        uses: actions/checkout@v6
+        with:
+          path: builder
+
+      - name: 拉取 llama.cpp 源码
+        env:
+          LLAMA_REF: ${{ inputs.llama_ref || 'master' }}
+        run: |
+          set -euo pipefail
+          mkdir -p llama.cpp && cd llama.cpp
+          git init -q .
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin "$LLAMA_REF"
+          git checkout -q FETCH_HEAD
+          echo "llama.cpp @ $(git rev-parse HEAD)"
+          cd ..
+
+      - name: 配置 CMake (Hexagon + OpenCL + CPU)
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'release' }}
+        run: |
+          set -euo pipefail
+          cd llama.cpp
+          if [ -f docs/backend/snapdragon/CMakeUserPresets.json ]; then
+            cp docs/backend/snapdragon/CMakeUserPresets.json .
+          elif [ -f docs/backend/hexagon/CMakeUserPresets.json ]; then
+            cp docs/backend/hexagon/CMakeUserPresets.json .
+          else
+            echo "::error::找不到 CMakeUserPresets.json"
+            exit 1
+          fi
+          cmake --preset "arm64-android-snapdragon-${BUILD_TYPE}" -B build
+          cd ..
+
+      - name: 编译
+        run: |
+          set -euo pipefail
+          cd llama.cpp
+          cmake --build build -j "$(nproc)"
+          cd ..
+
+      - name: 安装产物
+        run: |
+          set -euo pipefail
+          cd llama.cpp
+          cmake --install build --prefix ../pkg/llama.cpp
+          cd ..
+          echo "=== bin ==="; ls -1 pkg/llama.cpp/bin 2>/dev/null | head -30
+          echo "=== lib ==="; ls -1 pkg/llama.cpp/lib/*.so 2>/dev/null | head -40
+
+      - name: 整理成终端运行包
+        env:
+          HTP_ARCH: ${{ inputs.htp_arch || 'all' }}
+        run: |
+          set -euo pipefail
+          bash builder/scripts/make_terminal_pkg.sh pkg/llama.cpp out "$HTP_ARCH"
+
+      - name: 校验可执行文件是 Android arm64
+        run: |
+          set -euo pipefail
+          for f in out/bin/llama-cli out/bin/llama-bench; do
+            [ -f "$f" ] || continue
+            echo "--- $f ---"
+            readelf -h "$f" | grep -E 'Class|Machine|Type'
+          done
+          echo "--- 检查 .so 依赖是否齐全 ---"
+          for f in out/bin/*; do
+            for need in $(readelf -d "$f" | grep -o 'NEEDED.*\[.*\]' | sed 's/.*\[//;s/\]//'); do
+              [ -e "out/lib/$need" ] || echo "缺失: $need (被 $(basename "$f") 需要)"
+            done
+          done
+
+      - name: 生成 MANIFEST 写回仓库
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          tok = os.environ['GITHUB_TOKEN']; repo = os.environ['GITHUB_REPOSITORY']
+          lines = ["# 终端版产物清单 (run ${GITHUB_RUN_ID})", "", "## bin", ""]
+          bd = 'out/bin'
+          if os.path.isdir(bd):
+              for f in sorted(os.listdir(bd)):
+                  lines.append(f"- {f} ({os.path.getsize(os.path.join(bd,f))} bytes)")
+          else:
+              lines.append("(缺失)")
+          lines += ["", "## lib", ""]
+          ld = 'out/lib'
+          if os.path.isdir(ld):
+              for f in sorted(os.listdir(ld)):
+                  lines.append(f"- {f} ({os.path.getsize(os.path.join(ld,f))} bytes)")
+          else:
+              lines.append("(缺失)")
+          raw = "\n".join(lines).encode()
+          payload = {'message': 'docs: terminal build manifest',
+                     'content': base64.b64encode(raw).decode(), 'branch': 'main'}
+          try:
+              cur = None
+              g = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/TERMINAL-MANIFEST.md')
+              g.add_header('Authorization', 'Bearer '+tok); g.add_header('User-Agent', 'm')
+              with urllib.request.urlopen(g, timeout=120) as gr:
+                  cur = json.load(gr).get('sha')
+              if cur: payload['sha'] = cur
+          except Exception:
+              pass
+          req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/TERMINAL-MANIFEST.md', method='PUT')
+          req.add_header('Authorization', 'Bearer '+tok)
+          req.add_header('Accept', 'application/vnd.github+json')
+          req.add_header('Content-Type', 'application/json')
+          req.add_header('User-Agent', 'm')
+          try:
+              with urllib.request.urlopen(req, json.dumps(payload).encode(), timeout=300) as r:
+                  print('manifest ok', r.status)
+          except Exception as e:
+              print('manifest failed', repr(e))
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传终端包
+        uses: actions/upload-artifact@v6
+        with:
+          name: llama-hexagon-terminal-arm64
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
