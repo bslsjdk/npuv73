@@ -45,7 +45,67 @@ llama-hexagon-terminal-arm64
 
 ---
 
-## 三、产物长什么样
+## 三、三个后端都在，不会"纯 NPU"
+
+这点很重要：**NPU 永远不可能独自扛下整个模型**，必须留 CPU / GPU 兜底。
+包里默认带着三套后端：
+
+| 后端 | 库 | 作用 |
+|---|---|---|
+| **CPU** | `libggml-cpu.so` | 兜底。放不下 / 不支持的算子全落这儿 |
+| **GPU (Adreno)** | `libggml-opencl.so` | OpenCL 回退，NPU 吃不下时接一部分 |
+| **NPU (Hexagon HTP)** | `libggml-hexagon.so` + `libggml-htp-vXX.so` | 主力加速 |
+
+llama.cpp 的调度逻辑是：
+
+- `-ngl N` 决定**前 N 层** offload 到加速后端（NPU / GPU）
+- 剩下的层**自动留在 CPU**
+- 某个算子后端不支持时，ggml 会**自动回退到 CPU** 算
+
+所以你该这么用：
+
+```bash
+# 全部可 offload 的层都尽量丢给 NPU，剩下的 CPU 兜底
+./run.sh llama-cli -m model.gguf -p "你好" -n 128 -ngl 99 -t 4
+
+# 模型太大 NPU 装不下？少 offload 一点
+./run.sh llama-cli -m big.gguf -p "你好" -ngl 20 -t 4
+
+# 想看每层到底跑在哪，开 verbose
+./run.sh llama-cli -m model.gguf -p "你好" -ngl 99 -t 4 -v 2>&1 | grep -i hexagon
+```
+
+> 注意：同一个进程里 NPU 和 GPU 谁是"加速后端"取决于后端注册顺序，
+> 一般 NPU(Hexagon) 优先。想强制只用 CPU 就 `-ngl 0`。
+
+---
+
+## 三之二、想要更小的包
+
+71MB 那个是**全量版**（带 server、多模态、几十个测试工具）。
+现在工作流加了 `profile` 参数，选 **slim** 会砍掉：
+
+- `llama-server` 及其 37MB 的 `libllama-server-impl.so`
+- 多模态 `libmtmd.so`（13MB）
+- 全部 `test-*` 测试工具
+- `llama` 统一二进制、examples、UI
+
+只保留 **`llama-cli` + `llama-bench` + 量化工具**，三后端照旧全在。
+
+三个可调项：
+
+| 参数 | 建议 | 省多少 |
+|---|---|---|
+| `profile` | `slim` | **省 ~50MB**（大头） |
+| `htp_arch` | `v73` | 省 ~2.6MB（留一个架构） |
+| `keep_opencl` | `true` | 关掉省 ~13MB，但**就没 GPU 回退了** |
+
+> `keep_opencl` 建议保持 `true`。NPU 跑不动的时候 GPU 是第二道防线，
+> 省这 13MB 换来的是"NPU 一挂就没退路"。
+
+---
+
+## 四、产物长什么样
 
 ```
 out/
