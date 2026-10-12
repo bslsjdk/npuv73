@@ -52,6 +52,75 @@ if ! [ -f "${OUT_DIR}/lib/libc++_shared.so" ]; then
   fi
 fi
 
+# ---- 4.5 裁剪：只保留核心工具，并删掉没人引用的 .so ----
+KEEP_TOOLS="${KEEP_TOOLS:-false}"
+if [ "$KEEP_TOOLS" = "true" ]; then
+  WANT="llama-cli llama-bench llama-quantize llama-perplexity llama-tokenize llama-gguf-hash"
+  for f in "${OUT_DIR}"/bin/*; do
+    [ -f "${f}" ] || continue
+    n="$(basename "${f}")"
+    keep=0
+    for w in $WANT; do [ "$n" = "$w" ] && keep=1 && break; done
+    [ "$keep" = "1" ] || rm -f "${f}"
+  done
+  echo "已裁剪工具，保留: $WANT"
+
+  # 递归收集真正被引用的 .so，其余删除（系统库跳过）
+  if command -v readelf >/dev/null 2>&1; then
+    python3 - "$OUT_DIR" <<'PYX'
+import os, subprocess, sys
+out = sys.argv[1]
+libd = os.path.join(out, 'lib')
+bind = os.path.join(out, 'bin')
+SYS = {'libc.so','libm.so','libdl.so','liblog.so','libandroid.so','libEGL.so',
+       'libGLESv2.so','libOpenCL.so','libz.so','libstdc++.so','libpthread.so'}
+
+def needed(p):
+    try:
+        r = subprocess.run(['readelf','-d',p], capture_output=True, text=True, timeout=60)
+    except Exception:
+        return []
+    out_ = []
+    for line in r.stdout.splitlines():
+        if 'NEEDED' in line and '[' in line:
+            out_.append(line.split('[',1)[1].rstrip(']').strip())
+    return out_
+
+used = set()
+frontier = []
+for f in sorted(os.listdir(bind)):
+    p = os.path.join(bind, f)
+    if os.path.isfile(p):
+        frontier.append(p)
+for _ in range(4):
+    nxt = []
+    for p in frontier:
+        for n in needed(p):
+            if n in SYS or n in used:
+                continue
+            cand = os.path.join(libd, n)
+            if os.path.isfile(cand):
+                used.add(n)
+                nxt.append(cand)
+    frontier = nxt
+    if not frontier:
+        break
+
+removed = 0
+freed = 0
+for f in sorted(os.listdir(libd)):
+    if f.endswith('.so') and f not in used:
+        p = os.path.join(libd, f)
+        freed += os.path.getsize(p)
+        os.remove(p)
+        removed += 1
+        print('  删除未引用: %s' % f)
+print('裁剪 .so: %d 个，释放 %.1f MB' % (removed, freed/1048576))
+print('保留 .so: %s' % ' '.join(sorted(used)))
+PYX
+  fi
+fi
+
 # ---- 5. 生成 run.sh：自动设好 LD_LIBRARY_PATH ----
 cat > "${OUT_DIR}/run.sh" <<'EOS'
 #!/system/bin/sh
@@ -125,3 +194,5 @@ echo "=== bin ==="
 ls -1 "${OUT_DIR}/bin" 2>/dev/null | head -30
 echo "=== lib ==="
 ls -1 "${OUT_DIR}/lib" 2>/dev/null | head -40
+echo "=== 总大小 ==="
+du -sh "${OUT_DIR}" 2>/dev/null || true
