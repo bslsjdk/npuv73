@@ -21,14 +21,30 @@ on:
         default: 'master'
         type: string
       htp_arch:
-        description: 'HTP 架构固件库'
+        description: 'HTP 架构固件库（只留一个能省 ~2.6MB）'
         required: true
-        default: 'all'
+        default: 'v73'
         type: choice
         options:
-          - all
           - v73
+          - all
           - v75
+      profile:
+        description: '精简度：slim 只保留 llama-cli/llama-bench，砍掉 server、多模态、测试工具'
+        required: true
+        default: 'slim'
+        type: choice
+        options:
+          - slim
+          - full
+      keep_opencl:
+        description: '是否保留 Adreno GPU(OpenCL) 后端作为回退（约 13MB）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
       build_type:
         description: '构建类型'
         required: true
@@ -77,6 +93,8 @@ jobs:
       - name: 配置 CMake (Hexagon + OpenCL + CPU)
         env:
           BUILD_TYPE: ${{ inputs.build_type || 'release' }}
+          PROFILE: ${{ inputs.profile || 'slim' }}
+          KEEP_OPENCL: ${{ inputs.keep_opencl || 'true' }}
         run: |
           set -euo pipefail
           cd llama.cpp
@@ -88,7 +106,23 @@ jobs:
             echo "::error::找不到 CMakeUserPresets.json"
             exit 1
           fi
-          cmake --preset "arm64-android-snapdragon-${BUILD_TYPE}" -B build
+          EXTRA=""
+          if [ "$PROFILE" = "slim" ]; then
+            EXTRA="$EXTRA -DLLAMA_BUILD_TESTS=OFF"
+            EXTRA="$EXTRA -DLLAMA_BUILD_SERVER=OFF"
+            EXTRA="$EXTRA -DLLAMA_BUILD_APP=OFF"
+            EXTRA="$EXTRA -DLLAMA_BUILD_EXAMPLES=OFF"
+            EXTRA="$EXTRA -DLLAMA_BUILD_MTMD=OFF"
+            EXTRA="$EXTRA -DLLAMA_BUILD_UI=OFF"
+            EXTRA="$EXTRA -DLLAMA_OPENSSL=OFF"
+            EXTRA="$EXTRA -DLLAMA_CURL=OFF"
+          fi
+          if [ "$KEEP_OPENCL" = "false" ]; then
+            EXTRA="$EXTRA -DGGML_OPENCL=OFF"
+          fi
+          echo "cmake 附加参数: $EXTRA"
+          # shellcheck disable=SC2086
+          cmake --preset "arm64-android-snapdragon-${BUILD_TYPE}" -B build $EXTRA
           cd ..
 
       - name: 编译
@@ -174,6 +208,13 @@ jobs:
           PY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 报告最终体积
+        run: |
+          echo "=== 各部分体积 ==="
+          du -sh out out/bin out/lib 2>/dev/null || true
+          echo "=== 最大的 8 个文件 ==="
+          find out -type f -printf '%s %p\n' 2>/dev/null | sort -rn | head -8 | awk '{printf "%.1f MB  %s\n", $1/1048576, $2}'
 
       - name: 上传终端包
         uses: actions/upload-artifact@v6
