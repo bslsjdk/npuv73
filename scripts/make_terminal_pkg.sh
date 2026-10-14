@@ -52,37 +52,48 @@ if ! [ -f "${OUT_DIR}/lib/libc++_shared.so" ]; then
   fi
 fi
 
-# ---- 4.5 slim 模式：只留核心工具，删掉对应没人用的 .so ----
+# ---- 4.5 slim 模式：白名单保留核心工具 + 对应 impl 库 ----
+# 注意：用「复制到新目录再替换」而不是「遍历删除」，
+# 避免 for 循环退出状态在 set -e 下把 llama-cli 这种白名单项误删。
 KEEP_TOOLS="${KEEP_TOOLS:-false}"
 if [ "$KEEP_TOOLS" = "true" ]; then
-  WANT="llama-cli llama-bench llama-quantize llama-perplexity llama-tokenize llama-gguf-hash"
-  for f in "${OUT_DIR}"/bin/*; do
-    [ -f "${f}" ] || continue
-    n="$(basename "${f}")"
-    keep=0
-    for w in $WANT; do [ "$n" = "$w" ] && keep=1 && break; done
-    if [ "$keep" != "1" ]; then rm -f "${f}"; fi
-  done
-  echo "工具裁剪完成，保留: $WANT"
+  WANT="llama-cli llama-bench llama-quantize llama-perplexity llama-tokenize"
 
-  # 删掉随被裁工具一起没用的 *-impl.so
-  for so in "${OUT_DIR}"/lib/libllama-*-impl.so; do
-    [ -f "${so}" ] || continue
-    base="$(basename "${so}" .so)"           # libllama-xxx-impl
-    tool="llama-${base#libllama-}"
-    tool="${tool%-impl}"
-    # impl 名字形如 libllama-<tool>-impl.so -> 工具名 llama-<tool>
-    if ! [ -e "${OUT_DIR}/bin/${tool}" ]; then
-      echo "  删除未使用: $(basename "${so}") (对应工具 ${tool} 已移除)"
-      rm -f "${so}"
+  mkdir -p "${OUT_DIR}/bin.new"
+  for w in $WANT; do
+    if [ -f "${OUT_DIR}/bin/$w" ]; then
+      cp -a "${OUT_DIR}/bin/$w" "${OUT_DIR}/bin.new/"
+    else
+      echo "::warning::期望的工具 $w 不存在"
     fi
   done
+  rm -rf "${OUT_DIR}/bin"
+  mv "${OUT_DIR}/bin.new" "${OUT_DIR}/bin"
+  echo "工具保留: $(ls -1 "${OUT_DIR}/bin" | tr '\n' ' ')"
 
-  # 多模态库只被 llama-mtmd-cli 使用，没留就删
-  if ! [ -e "${OUT_DIR}/bin/llama-mtmd-cli" ]; then
-    rm -f "${OUT_DIR}/lib/libmtmd.so"
-    echo "  删除未使用: libmtmd.so"
-  fi
+  # impl 库：只留白名单工具对应的；后端插件和运行时永远保留
+  mkdir -p "${OUT_DIR}/lib.new"
+  KEEP_SO=""
+  for w in $WANT; do
+    KEEP_SO="$KEEP_SO lib${w}-impl.so"
+  done
+  for f in "${OUT_DIR}"/lib/*; do
+    [ -f "$f" ] || continue
+    n="$(basename "$f")"
+    case "$n" in
+      libggml*.so|libllama.so|libllama-common.so|libmtmd.so|libc++_shared.so)
+        cp -a "$f" "${OUT_DIR}/lib.new/" ;;   # 后端 / 主库 / 运行时，全留
+      *)
+        hit=0
+        for k in $KEEP_SO; do [ "$n" = "$k" ] && hit=1 && break; done
+        if [ "$hit" = "1" ]; then cp -a "$f" "${OUT_DIR}/lib.new/"; fi ;;
+    esac
+  done
+  # mtmd 只在 llama-mtmd-cli 存在时才有意义
+  if ! [ -e "${OUT_DIR}/bin/llama-mtmd-cli" ]; then rm -f "${OUT_DIR}/lib.new/libmtmd.so"; fi
+  rm -rf "${OUT_DIR}/lib"
+  mv "${OUT_DIR}/lib.new" "${OUT_DIR}/lib"
+  echo "库保留: $(ls -1 "${OUT_DIR}/lib" | tr '\n' ' ')"
 fi
 
 # ---- 5. 生成 run.sh：自动设好 LD_LIBRARY_PATH ----
