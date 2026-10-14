@@ -53,6 +53,14 @@ on:
         options:
           - release
           - debug
+      enable_iq4xs:
+        description: '启用 IQ4_XS 补丁（让 NPU 支持 IQ4_XS 量化模型）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 permissions:
   contents: read
@@ -89,6 +97,16 @@ jobs:
           git checkout -q FETCH_HEAD
           echo "llama.cpp @ $(git rev-parse HEAD)"
           cd ..
+
+      - name: 应用 IQ4_XS 补丁
+        if: ${{ inputs.enable_iq4xs != 'false' }}
+        run: |
+          set -euo pipefail
+          python3 builder/patches/apply_iq4xs.py llama.cpp
+          echo "--- 校验补丁是否落地 ---"
+          grep -c 'IQ4_XS' llama.cpp/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+          grep -c 'HTP_TYPE_IQ4_XS' llama.cpp/ggml/src/ggml-hexagon/htp/htp-ops.h
+          grep -c 'HTP_TYPE_IQ4_XS' llama.cpp/ggml/src/ggml-hexagon/htp/matmul-ops.c
 
       - name: 配置 CMake (Hexagon + OpenCL + CPU)
         env:
