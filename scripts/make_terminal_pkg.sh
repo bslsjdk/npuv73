@@ -24,18 +24,21 @@ if [ "${HTP_ARCH}" = "v73" ]; then
 fi
 
 # ---- 3. 可执行文件进 bin/ ----
-# 只收 ELF 可执行文件，跳过 .so / 非二进制
+# 注意：这里刻意不做 ELF 头检测。早先用
+#   head -c 4 "$f" | grep -q $'\x7fELF'
+# 在 set -o pipefail 下会因为 grep -q 提前退出触发 SIGPIPE、
+# 管道返回 141，导致 llama-cli 被静默跳过。bin/ 下的东西本来就是
+# 可执行文件，直接全收最稳。
 if [ -d "${BIN_DIR}" ]; then
   for f in "${BIN_DIR}"/*; do
     [ -f "${f}" ] || continue
     case "$(basename "${f}")" in
-      *.so|*.dll|*.a|*.exe) continue ;;
+      *.so|*.dll|*.a|*.exe|*.sh|*.py|*.md|*.txt) continue ;;
     esac
-    if head -c 4 "${f}" 2>/dev/null | grep -q $'\x7fELF'; then
-      cp -a "${f}" "${OUT_DIR}/bin/"
-      chmod +x "${OUT_DIR}/bin/$(basename "${f}")"
-    fi
+    cp -a "${f}" "${OUT_DIR}/bin/"
+    chmod +x "${OUT_DIR}/bin/$(basename "${f}")"
   done
+  echo "bin 已复制: $(ls -1 "${OUT_DIR}/bin" | wc -l) 个"
 fi
 
 # ---- 4. 补 libc++_shared.so（没有它终端里直接 link 失败）----
@@ -94,6 +97,16 @@ if [ "$KEEP_TOOLS" = "true" ]; then
   rm -rf "${OUT_DIR}/lib"
   mv "${OUT_DIR}/lib.new" "${OUT_DIR}/lib"
   echo "库保留: $(ls -1 "${OUT_DIR}/lib" | tr '\n' ' ')"
+fi
+
+# ---- 4.6 保险：slim 模式下 llama-cli 必须在 ----
+if [ "${KEEP_TOOLS:-false}" = "true" ]; then
+  if [ ! -f "${OUT_DIR}/bin/llama-cli" ]; then
+    echo "::error::slim 之后 llama-cli 不见了，从源目录补回"
+    mkdir -p "${OUT_DIR}/bin"
+    cp -a "${BIN_DIR}/llama-cli" "${OUT_DIR}/bin/" || echo "::error::源目录也没有 llama-cli"
+    chmod +x "${OUT_DIR}/bin/llama-cli" 2>/dev/null || true
+  fi
 fi
 
 # ---- 5. 生成 run.sh：自动设好 LD_LIBRARY_PATH ----
