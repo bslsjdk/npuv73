@@ -109,6 +109,21 @@ if [ "${KEEP_TOOLS:-false}" = "true" ]; then
   fi
 fi
 
+# ---- 4.7 放进诊断脚本 ----
+for s in diag-npu.sh; do
+  src=""
+  for cand in "$(dirname "$0")/$s" "builder/scripts/$s" "./$s"; do
+    [ -f "$cand" ] && src="$cand" && break
+  done
+  if [ -n "$src" ]; then
+    cp -a "$src" "${OUT_DIR}/"
+    chmod +x "${OUT_DIR}/$s"
+    echo "已放入 $s"
+  else
+    echo "::warning::找不到 $s"
+  fi
+done
+
 # ---- 5. 生成 run.sh：自动设好 LD_LIBRARY_PATH ----
 cat > "${OUT_DIR}/run.sh" <<'EOS'
 #!/system/bin/sh
