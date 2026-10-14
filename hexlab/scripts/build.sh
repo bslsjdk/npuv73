@@ -20,9 +20,19 @@ for c in hexagon-clang /opt/qcom/hexagon/bin/hexagon-clang /usr/bin/hexagon-clan
     if command -v "$c" >/dev/null 2>&1; then HEX_CLANG="$(command -v "$c")"; break; fi
 done
 if [ -z "$HEX_CLANG" ]; then
+    # 高通容器里通常在 /opt/hexagon/<sdk>/tools/HEXAGON_Tools/<ver>/Tools/bin/
+    for p in /opt/hexagon/*/tools/HEXAGON_Tools/*/Tools/bin/hexagon-clang; do
+        [ -x "$p" ] && HEX_CLANG="$p" && break
+    done
+fi
+if [ -z "$HEX_CLANG" ]; then
     HEX_CLANG="$(find / -name 'hexagon-clang' -type f 2>/dev/null | head -1 || true)"
 fi
 echo "hexagon-clang : ${HEX_CLANG:-未找到}"
+
+# qurt / hexagon 头文件：跟着编译器目录往上找
+HEX_TOOLS_DIR="$(dirname "${HEX_CLANG:-/nonexistent}")"
+[ -d "$HEX_TOOLS_DIR" ] || HEX_TOOLS_DIR="" 
 
 QAIC=""
 if command -v qaic >/dev/null 2>&1; then
@@ -68,16 +78,33 @@ if [ -z "$HEX_CLANG" ]; then
 fi
 
 INC_FLAGS=()
+# 编译器自带的 hexagon include（hexagon_types.h / hexagon_protos.h 通常在这）
+for d in "$HEX_TOOLS_DIR"/../include "$HEX_TOOLS_DIR"/../../include \
+         "$HEX_TOOLS_DIR"/../target/hexagon/include \
+         "$HEX_TOOLS_DIR"/../../../Tools/target/hexagon/include; do
+    [ -d "$d" ] && INC_FLAGS+=("-I$d")
+done
+# SDK 里的 qurt / rpcmem
 if [ -n "$HEX_INC" ]; then
-    for d in "$HEX_INC"/incs "$HEX_INC"/incs/stddef "$HEX_INC"/rtos/qurt/computev66/include/qurt \
-             "$HEX_INC"/rtos/qurt/computev68/include/qurt "$HEX_INC"/libs/common/rpcmem; do
+    for d in "$HEX_INC"/incs "$HEX_INC"/incs/stddef \
+             "$HEX_INC"/rtos/qurt/computev*/include/qurt \
+             "$HEX_INC"/rtos/qurt/computev*/include \
+             "$HEX_INC"/libs/common/rpcmem; do
         [ -d "$d" ] && INC_FLAGS+=("-I$d")
     done
 fi
+# 兜底：全盘找 qurt.h 所在目录
+QURT_H="$(find / -name 'qurt.h' -type f 2>/dev/null | head -1 || true)"
+if [ -n "$QURT_H" ]; then INC_FLAGS+=("-I$(dirname "$QURT_H")"); fi
+HEXT_H="$(find / -name 'hexagon_types.h' -type f 2>/dev/null | head -1 || true)"
+if [ -n "$HEXT_H" ]; then INC_FLAGS+=("-I$(dirname "$HEXT_H")"); fi
+HEXP_H="$(find / -name 'hexagon_protos.h' -type f 2>/dev/null | head -1 || true)"
+if [ -n "$HEXP_H" ]; then INC_FLAGS+=("-I$(dirname "$HEXP_H")"); fi
+echo "包含路径: ${INC_FLAGS[*]:-(无)}"
 
 set +e
 # shellcheck disable=SC2086
-"$HEX_CLANG" -m"$ARCH" -O3 -fPIC -shared \
+"$HEX_CLANG" -m"$ARCH" -O3 -fPIC -shared ${CFLAGS_EXTRA:-} \
     "${INC_FLAGS[@]}" \
     -I"$OUT/gen" -I"$HERE/dsp" \
     -o "$OUT/dsp/libhexprobe.so" \
