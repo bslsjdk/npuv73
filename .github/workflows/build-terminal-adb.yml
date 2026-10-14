@@ -108,11 +108,10 @@ jobs:
           fi
           EXTRA=""
           if [ "$PROFILE" = "slim" ]; then
-            # 只关掉体积最大的两块：server(37MB impl) 和 mtmd(13MB)
-            # 其它一律保持默认，避免误伤 llama-cli 所属目标
+            # 编译阶段只关 server（37MB 的 libllama-server-impl.so）。
+            # 其余瘦身全部交给打包脚本做白名单裁剪，
+            # 因为关太多 CMake 目标会误伤 llama-cli / 导致编译失败。
             EXTRA="$EXTRA -DLLAMA_BUILD_SERVER=OFF"
-            EXTRA="$EXTRA -DLLAMA_BUILD_MTMD=OFF"
-            EXTRA="$EXTRA -DLLAMA_BUILD_TESTS=OFF"
           fi
           if [ "$KEEP_OPENCL" = "false" ]; then
             EXTRA="$EXTRA -DGGML_OPENCL=OFF"
