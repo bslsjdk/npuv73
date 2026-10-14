@@ -111,7 +111,8 @@ jobs:
             EXTRA="$EXTRA -DLLAMA_BUILD_TESTS=OFF"
             EXTRA="$EXTRA -DLLAMA_BUILD_SERVER=OFF"
             EXTRA="$EXTRA -DLLAMA_BUILD_APP=OFF"
-            EXTRA="$EXTRA -DLLAMA_BUILD_EXAMPLES=OFF"
+            # 注意：llama-cli 归在 examples 目标里，关掉它就没有 llama-cli 了
+            EXTRA="$EXTRA -DLLAMA_BUILD_EXAMPLES=ON"
             EXTRA="$EXTRA -DLLAMA_BUILD_MTMD=OFF"
             EXTRA="$EXTRA -DLLAMA_BUILD_UI=OFF"
             EXTRA="$EXTRA -DLLAMA_OPENSSL=OFF"
@@ -140,6 +141,15 @@ jobs:
           cd ..
           echo "=== bin ==="; ls -1 pkg/llama.cpp/bin 2>/dev/null | head -30
           echo "=== lib ==="; ls -1 pkg/llama.cpp/lib/*.so 2>/dev/null | head -40
+
+      - name: 断言 llama-cli 已产出
+        run: |
+          set -euo pipefail
+          ls -1 pkg/llama.cpp/bin
+          if [ ! -f pkg/llama.cpp/bin/llama-cli ]; then
+            echo "::error::llama-cli 没有被编译出来，后面的包没法用"
+            exit 1
+          fi
 
       - name: 整理成终端运行包
         env:
