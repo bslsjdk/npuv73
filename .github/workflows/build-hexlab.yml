@@ -1,0 +1,123 @@
+name: hexlab — 自研 Hexagon 探测
+
+on:
+  workflow_dispatch:
+    inputs:
+      dsp_arch:
+        description: 'DSP 架构（与手机对应）'
+        required: true
+        default: 'v73'
+        type: choice
+        options: [v73, v75, v79, v81]
+      disable_vrmpy:
+        description: '关掉 vrmpy 内联（编译报该符号不存在时打开）'
+        required: true
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hexlab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    container:
+      image: 'ghcr.io/snapdragon-toolchain/arm64-android:v0.7'
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: repo
+
+      - name: 工具链测绘（写回仓库，供后续参考）
+        id: tc
+        run: |
+          {
+            echo "# 容器工具链测绘"
+            echo
+            echo "生成时间: $(date -u)"
+            echo
+            echo "## hexagon-clang"
+            find / -name 'hexagon-clang*' -type f 2>/dev/null | head -5
+            H=$(find / -name 'hexagon-clang' -type f 2>/dev/null | head -1)
+            [ -n "$H" ] && "$H" --version 2>&1 | head -3
+            echo
+            echo "## qaic"
+            find / -name 'qaic*' -type f 2>/dev/null | head -5
+            echo
+            echo "## Hexagon SDK"
+            find / -maxdepth 4 -type d -name 'Hexagon_SDK*' 2>/dev/null | head -5
+            SDKD=$(find / -maxdepth 4 -type d -name 'Hexagon_SDK*' 2>/dev/null | head -1)
+            [ -n "$SDKD" ] && ls "$SDKD"
+            echo
+            echo "## 相关头文件位置"
+            find / -name 'hexagon_types.h' 2>/dev/null | head -5
+            find / -name 'hexagon_protos.h' 2>/dev/null | head -5
+            find / -name 'qurt.h' 2>/dev/null | head -5
+            find / -name 'AEEStdDef.idl' 2>/dev/null | head -5
+            echo
+            echo "## ARM 编译器"
+            command -v clang && clang --version | head -2
+            ls /opt/android-ndk*/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android*-clang 2>/dev/null | head -5
+          } > repo/TOOLCHAIN.md 2>&1
+          cat repo/TOOLCHAIN.md | head -60
+
+      - name: 构建
+        id: build
+        continue-on-error: true
+        run: |
+          cd repo/hexlab
+          if [ "${{ inputs.disable_vrmpy }}" = "true" ]; then
+            export CFLAGS_EXTRA="-DHP_HAVE_VRMPY=0"
+            echo "关闭 vrmpy"
+          fi
+          bash scripts/build.sh "${{ inputs.dsp_arch }}" 2>&1 | tee ../../build.log
+          echo "build_rc=${PIPESTATUS[0]}"
+
+      - name: 回传构建日志
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          tok = os.environ['GITHUB_TOKEN']; repo = os.environ['GITHUB_REPOSITORY']
+          def put(path, raw, msg):
+              if not os.path.exists(raw): return
+              data = open(raw,'rb').read()[:300000]
+              payload = {'message': msg, 'content': base64.b64encode(data).decode(), 'branch': 'main'}
+              try:
+                  g = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/{path}')
+                  g.add_header('Authorization','Bearer '+tok); g.add_header('User-Agent','hl')
+                  with urllib.request.urlopen(g, timeout=120) as gr: payload['sha']=json.load(gr).get('sha')
+              except Exception: pass
+              req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/{path}', method='PUT')
+              req.add_header('Authorization','Bearer '+tok)
+              req.add_header('Accept','application/vnd.github+json')
+              req.add_header('Content-Type','application/json')
+              req.add_header('User-Agent','hl')
+              try:
+                  with urllib.request.urlopen(req, json.dumps(payload).encode(), timeout=300) as r:
+                      print(path, r.status)
+              except Exception as e: print(path, 'failed', repr(e)[:200])
+          put('BUILD-LOG.txt', 'build.log', 'ci: hexlab build log')
+          put('TOOLCHAIN.md', 'repo/TOOLCHAIN.md', 'ci: toolchain map')
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传产物
+        if: success() || steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v6
+        with:
+          name: hexlab-${{ inputs.dsp_arch }}
+          path: repo/hexlab/out/
+          if-no-files-found: warn
+          retention-days: 30
