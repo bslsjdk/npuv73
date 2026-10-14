@@ -106,27 +106,49 @@ jobs:
             echo "::error::找不到 CMakeUserPresets.json"
             exit 1
           fi
+          # 编译阶段不加任何 -D：preset 自带完整配置，加 -D 容易和 preset 冲突
+          # 导致编译失败。所有瘦身在打包脚本里做（白名单裁剪）。
           EXTRA=""
-          if [ "$PROFILE" = "slim" ]; then
-            # 编译阶段只关 server（37MB 的 libllama-server-impl.so）。
-            # 其余瘦身全部交给打包脚本做白名单裁剪，
-            # 因为关太多 CMake 目标会误伤 llama-cli / 导致编译失败。
-            EXTRA="$EXTRA -DLLAMA_BUILD_SERVER=OFF"
-          fi
-          if [ "$KEEP_OPENCL" = "false" ]; then
-            EXTRA="$EXTRA -DGGML_OPENCL=OFF"
-          fi
           echo "cmake 附加参数: $EXTRA"
           # shellcheck disable=SC2086
           cmake --preset "arm64-android-snapdragon-${BUILD_TYPE}" -B build $EXTRA
           cd ..
 
       - name: 编译
+        id: compile
+        continue-on-error: true
         run: |
           set -euo pipefail
           cd llama.cpp
-          cmake --build build -j "$(nproc)"
+          cmake --build build -j "$(nproc)" > ../build.log 2>&1 || {
+            echo "编译失败，最后 200 行:"; tail -n 200 ../build.log; cd ..; exit 1;
+          }
           cd ..
+          tail -n 30 build.log
+
+      - name: 回传编译日志
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          tok = os.environ['GITHUB_TOKEN']; repo = os.environ['GITHUB_REPOSITORY']
+          if not os.path.exists('build.log'): raise SystemExit(0)
+          raw = open('build.log','rb').read()[-150000:]
+          payload = {'message':'ci: build log','content':base64.b64encode(raw).decode(),'branch':'main'}
+          try:
+              g = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/BUILD-LOG.txt')
+              g.add_header('Authorization','Bearer '+tok); g.add_header('User-Agent','b')
+              with urllib.request.urlopen(g, timeout=120) as gr: payload['sha']=json.load(gr).get('sha')
+          except Exception: pass
+          req = urllib.request.Request(f'https://api.github.com/repos/{repo}/contents/BUILD-LOG.txt', method='PUT')
+          req.add_header('Authorization','Bearer '+tok); req.add_header('Accept','application/vnd.github+json')
+          req.add_header('Content-Type','application/json'); req.add_header('User-Agent','b')
+          try:
+              with urllib.request.urlopen(req, json.dumps(payload).encode(), timeout=300) as r: print('ok', r.status)
+          except Exception as e: print('failed', repr(e)[:300])
+          PY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 安装产物
         run: |
