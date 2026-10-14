@@ -1,4 +1,4 @@
-# 终端包内容验证 (run 38285906235)
+# 终端包内容验证 (run 38512734489)
 
 ## 目录树
 dl
@@ -25,35 +25,35 @@ dl/run.sh
 
 ## bin 内容
 total 596
-drwxr-xr-x 2 runner runner   4096 Oct 14 04:37 .
-drwxr-xr-x 4 runner runner   4096 Oct 14 04:37 ..
--rw-r--r-- 1 runner runner   7392 Oct 14 04:37 llama-bench
--rw-r--r-- 1 runner runner   7472 Oct 14 04:37 llama-perplexity
--rw-r--r-- 1 runner runner   7400 Oct 14 04:37 llama-quantize
--rw-r--r-- 1 runner runner 577240 Oct 14 04:37 llama-tokenize
+drwxr-xr-x 2 runner runner   4096 Oct 14 04:49 .
+drwxr-xr-x 4 runner runner   4096 Oct 14 04:49 ..
+-rw-r--r-- 1 runner runner   7392 Oct 14 04:49 llama-bench
+-rw-r--r-- 1 runner runner   7472 Oct 14 04:49 llama-perplexity
+-rw-r--r-- 1 runner runner   7400 Oct 14 04:49 llama-quantize
+-rw-r--r-- 1 runner runner 577240 Oct 14 04:49 llama-tokenize
 
 ## lib 内容
-total 137712
-drwxr-xr-x 2 runner runner     4096 Oct 14 04:37 .
-drwxr-xr-x 4 runner runner     4096 Oct 14 04:37 ..
--rw-r--r-- 1 runner runner  9290184 Oct 14 04:37 libc++_shared.so
--rw-r--r-- 1 runner runner  7783552 Oct 14 04:37 libggml-base.so
--rw-r--r-- 1 runner runner  4353616 Oct 14 04:37 libggml-cpu.so
--rw-r--r-- 1 runner runner  7404592 Oct 14 04:37 libggml-hexagon.so
--rw-r--r-- 1 runner runner   857128 Oct 14 04:37 libggml-htp-v73.so
--rw-r--r-- 1 runner runner 13517560 Oct 14 04:37 libggml-opencl.so
--rw-r--r-- 1 runner runner   392432 Oct 14 04:37 libggml.so
--rw-r--r-- 1 runner runner  3733368 Oct 14 04:37 libllama-bench-impl.so
--rw-r--r-- 1 runner runner 53377016 Oct 14 04:37 libllama-common.so
--rw-r--r-- 1 runner runner  1622744 Oct 14 04:37 libllama-perplexity-impl.so
--rw-r--r-- 1 runner runner  1011640 Oct 14 04:37 libllama-quantize-impl.so
--rw-r--r-- 1 runner runner 37640432 Oct 14 04:37 libllama.so
+total 137884
+drwxr-xr-x 2 runner runner     4096 Oct 14 04:49 .
+drwxr-xr-x 4 runner runner     4096 Oct 14 04:49 ..
+-rw-r--r-- 1 runner runner  9290184 Oct 14 04:49 libc++_shared.so
+-rw-r--r-- 1 runner runner  7783792 Oct 14 04:49 libggml-base.so
+-rw-r--r-- 1 runner runner  4353616 Oct 14 04:49 libggml-cpu.so
+-rw-r--r-- 1 runner runner  7412120 Oct 14 04:49 libggml-hexagon.so
+-rw-r--r-- 1 runner runner   852040 Oct 14 04:49 libggml-htp-v73.so
+-rw-r--r-- 1 runner runner 13517560 Oct 14 04:49 libggml-opencl.so
+-rw-r--r-- 1 runner runner   388160 Oct 14 04:49 libggml.so
+-rw-r--r-- 1 runner runner  3733368 Oct 14 04:49 libllama-bench-impl.so
+-rw-r--r-- 1 runner runner 53490008 Oct 14 04:49 libllama-common.so
+-rw-r--r-- 1 runner runner  1622744 Oct 14 04:49 libllama-perplexity-impl.so
+-rw-r--r-- 1 runner runner  1011640 Oct 14 04:49 libllama-quantize-impl.so
+-rw-r--r-- 1 runner runner 37702736 Oct 14 04:49 libllama.so
 
 ## 总体积
 136M	dl
 ## 最大的 10 个文件
-50.9 MB  dl/lib/libllama-common.so
-35.9 MB  dl/lib/libllama.so
+51.0 MB  dl/lib/libllama-common.so
+36.0 MB  dl/lib/libllama.so
 12.9 MB  dl/lib/libggml-opencl.so
 8.9 MB  dl/lib/libc++_shared.so
 7.4 MB  dl/lib/libggml-base.so
