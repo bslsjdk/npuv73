@@ -1,0 +1,51 @@
+// hexlab — 自研 Hexagon 探测接口
+//
+// 这是我们自己写的 FastRPC 接口，不是 llama.cpp 的 htp_iface。
+// 目的：在真实 cDSP 上跑我们自己的代码，测量硬件本身的能力，
+//       而不是依赖现成后端打日志。
+//
+// URI 形如: file:///libhexprobe.so?hexprobe_skel_handle_invoke&_modver=1.0
+
+#ifndef HEXPROBE_IDL
+#define HEXPROBE_IDL
+
+#include "AEEStdDef.idl"
+#include "remote.idl"
+
+interface hexprobe : remote_handle64 {
+
+    // 第 1 层：编译期 / 运行期硬件身份
+    //   hvx_arch  : __HVX_ARCH__（0 表示无 HVX）
+    //   dsp_arch  : __HEXAGON_ARCH__（73 = v73, 75 = v75 ...）
+    //   vec_bytes : HVX 向量寄存器字节数（v6x 之后为 128）
+    //   reserved  : 保留
+    AEEResult hwinfo(rout uint32 hvx_arch,
+                     rout uint32 dsp_arch,
+                     rout uint32 vec_bytes,
+                     rout uint32 reserved);
+
+    // 第 2 层：微基准
+    //   which = 1 空调用（仅 FastRPC 往返 + 计时开销）
+    //           2 INT8  向量加（byte lane）
+    //           3 INT16 乘加（halfword lane）
+    //           4 INT4  打包点积（nibble 解包 + 累加）
+    //           5 MEMCPY（DDR<->DDR，DSP 视角带宽）
+    //           6 INT8  GEMM（M=N=16，K=len）
+    //           7 INT4  GEMM（M=N=16，K=len 打包字节）
+    //   cycles / ops 由 DSP 侧返回，usec 由 ARM 侧墙钟测量
+    AEEResult bench(in uint32 which,
+                    in uint32 iters,
+                    in uint32 len,
+                    rout uint64 cycles,
+                    rout uint64 ops,
+                    rout uint32 checksum);
+
+    // 频率标定：DSP 空转到累计 cycles >= approx_cycles 后返回
+    // ARM 侧墙钟计时 → MHz = cycles / usec
+    // 短时间跑与长时间跑对比，可看出是否降频
+    AEEResult spin(in uint32 approx_cycles,
+                   rout uint64 cycles,
+                   rout uint32 iters);
+};
+
+#endif /* HEXPROBE_IDL */
