@@ -1,0 +1,20 @@
+########## 工具链探测 ##########
+hexagon-clang : /opt/hexagon/6.6.0.0/tools/HEXAGON_Tools/19.0.07/Tools/bin/hexagon-clang
+qaic          : /opt/hexagon/6.6.0.0/ipc/fastrpc/qaic/bin/qaic
+Hexagon SDK   : 未找到
+QuIC LLVM Hexagon Clang version 19.0.07
+Target: hexagon
+Thread model: posix
+
+########## 生成 stub / skel ##########
+qaic: /__w/npuv73/npuv73/repo/hexlab/idl/hexprobe.idl: hGetContents: invalid argument (cannot decode byte sequence starting from 226)
+HasCallStack backtrace:
+  collectBacktraces, called at libraries/ghc-internal/src/GHC/Internal/Exception.hs:169:13 in ghc-internal:GHC.Internal.Exception
+  toExceptionWithBacktrace, called at libraries/ghc-internal/src/GHC/Internal/Exception.hs:89:42 in ghc-internal:GHC.Internal.Exception
+  throw, called at libraries/ghc-internal/src/GHC/Internal/IO/Handle/Text.hs:442:35 in ghc-internal:GHC.Internal.IO.Handle.Text
+
+
+total 8
+drwxr-xr-x 2 root root 4096 Oct 14 09:12 .
+drwxr-xr-x 5 root root 4096 Oct 14 09:12 ..
+::error:: qaic 没有生成 hexprobe.h
