@@ -108,16 +108,11 @@ jobs:
           fi
           EXTRA=""
           if [ "$PROFILE" = "slim" ]; then
-            EXTRA="$EXTRA -DLLAMA_BUILD_TESTS=OFF"
+            # 只关掉体积最大的两块：server(37MB impl) 和 mtmd(13MB)
+            # 其它一律保持默认，避免误伤 llama-cli 所属目标
             EXTRA="$EXTRA -DLLAMA_BUILD_SERVER=OFF"
-            EXTRA="$EXTRA -DLLAMA_BUILD_APP=OFF"
-            # llama-cli / llama-bench / llama-quantize 都在 TOOLS 目标下，必须留着
-            EXTRA="$EXTRA -DLLAMA_BUILD_TOOLS=ON"
-            EXTRA="$EXTRA -DLLAMA_BUILD_EXAMPLES=OFF"
             EXTRA="$EXTRA -DLLAMA_BUILD_MTMD=OFF"
-            EXTRA="$EXTRA -DLLAMA_BUILD_UI=OFF"
-            EXTRA="$EXTRA -DLLAMA_OPENSSL=OFF"
-            EXTRA="$EXTRA -DLLAMA_CURL=OFF"
+            EXTRA="$EXTRA -DLLAMA_BUILD_TESTS=OFF"
           fi
           if [ "$KEEP_OPENCL" = "false" ]; then
             EXTRA="$EXTRA -DGGML_OPENCL=OFF"
