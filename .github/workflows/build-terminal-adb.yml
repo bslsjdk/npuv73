@@ -111,8 +111,9 @@ jobs:
             EXTRA="$EXTRA -DLLAMA_BUILD_TESTS=OFF"
             EXTRA="$EXTRA -DLLAMA_BUILD_SERVER=OFF"
             EXTRA="$EXTRA -DLLAMA_BUILD_APP=OFF"
-            # 注意：llama-cli 归在 examples 目标里，关掉它就没有 llama-cli 了
-            EXTRA="$EXTRA -DLLAMA_BUILD_EXAMPLES=ON"
+            # llama-cli / llama-bench / llama-quantize 都在 TOOLS 目标下，必须留着
+            EXTRA="$EXTRA -DLLAMA_BUILD_TOOLS=ON"
+            EXTRA="$EXTRA -DLLAMA_BUILD_EXAMPLES=OFF"
             EXTRA="$EXTRA -DLLAMA_BUILD_MTMD=OFF"
             EXTRA="$EXTRA -DLLAMA_BUILD_UI=OFF"
             EXTRA="$EXTRA -DLLAMA_OPENSSL=OFF"
