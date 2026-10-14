@@ -172,6 +172,14 @@ fi
 EOS
 chmod +x "${OUT_DIR}/check-npu.sh"
 
+# ---- 6.5 带上 NPU 诊断脚本 ----
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "${SCRIPT_DIR}/diagnose-npu.sh" ]; then
+  cp -a "${SCRIPT_DIR}/diagnose-npu.sh" "${OUT_DIR}/"
+  chmod +x "${OUT_DIR}/diagnose-npu.sh"
+  echo "已带上 diagnose-npu.sh"
+fi
+
 # ---- 7. 去掉符号，减小体积 ----
 if command -v llvm-strip >/dev/null 2>&1; then
   find "${OUT_DIR}/bin" -type f -exec llvm-strip --strip-unneeded {} \; 2>/dev/null || true
