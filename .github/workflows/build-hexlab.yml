@@ -41,35 +41,48 @@ jobs:
       - name: 工具链测绘（写回仓库，供后续参考）
         id: tc
         run: |
+          set +e
           {
             echo "# 容器工具链测绘"
             echo
             echo "生成时间: $(date -u)"
             echo
-            echo "## hexagon-clang"
-            find / -name 'hexagon-clang*' -type f 2>/dev/null | head -5
+            echo "## hexagon-clang 本体"
+            ls -la /opt/hexagon/*/tools/HEXAGON_Tools/*/Tools/bin/ 2>/dev/null | grep -E 'hexagon-clang$|hexagon-clang\+\+$' || true
+            find / -name 'hexagon-clang' -type f 2>/dev/null | head -5 || true
             H=$(find / -name 'hexagon-clang' -type f 2>/dev/null | head -1)
-            [ -n "$H" ] && "$H" --version 2>&1 | head -3
+            echo "选中: $H"
+            if [ -n "$H" ]; then "$H" --version 2>&1 | head -5; fi
             echo
             echo "## qaic"
-            find / -name 'qaic*' -type f 2>/dev/null | head -5
+            find / -name 'qaic*' 2>/dev/null | head -10 || true
             echo
-            echo "## Hexagon SDK"
-            find / -maxdepth 4 -type d -name 'Hexagon_SDK*' 2>/dev/null | head -5
-            SDKD=$(find / -maxdepth 4 -type d -name 'Hexagon_SDK*' 2>/dev/null | head -1)
-            [ -n "$SDKD" ] && ls "$SDKD"
+            echo "## Hexagon SDK 目录"
+            find / -maxdepth 6 -type d -name 'Hexagon_SDK*' 2>/dev/null | head -10 || true
+            ls /opt/ 2>/dev/null || true
+            ls /opt/hexagon/ 2>/dev/null || true
             echo
-            echo "## 相关头文件位置"
-            find / -name 'hexagon_types.h' 2>/dev/null | head -5
-            find / -name 'hexagon_protos.h' 2>/dev/null | head -5
-            find / -name 'qurt.h' 2>/dev/null | head -5
-            find / -name 'AEEStdDef.idl' 2>/dev/null | head -5
+            echo "## SDK 版本文件"
+            find /opt/hexagon -maxdepth 3 -name '*.xml' -o -maxdepth 3 -name 'version*' 2>/dev/null | head -10 || true
+            echo
+            echo "## 关键头文件"
+            for h in hexagon_types.h hexagon_protos.h qurt.h AEEStdDef.idl remote.idl; do
+              echo "-- $h"
+              find / -name "$h" 2>/dev/null | head -4 || true
+            done
+            echo
+            echo "## qurt 库"
+            find / -name 'libqurt*.a' -o -name 'libqurt*.so' 2>/dev/null | head -8 || true
             echo
             echo "## ARM 编译器"
-            command -v clang && clang --version | head -2
-            ls /opt/android-ndk*/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android*-clang 2>/dev/null | head -5
+            command -v clang 2>/dev/null && clang --version 2>&1 | head -2 || true
+            find / -name 'aarch64-linux-android*-clang' -type f 2>/dev/null | head -5 || true
+            echo
+            echo "## NDK"
+            ls -d /opt/android-ndk* /opt/ndk* 2>/dev/null || true
           } > repo/TOOLCHAIN.md 2>&1
-          cat repo/TOOLCHAIN.md | head -60
+          cat repo/TOOLCHAIN.md
+          exit 0
 
       - name: 构建
         id: build
