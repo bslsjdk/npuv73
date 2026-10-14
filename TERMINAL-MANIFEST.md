@@ -25,29 +25,29 @@ dl/run.sh
 
 ## bin 内容
 total 596
-drwxr-xr-x 2 runner runner   4096 Oct 14 05:04 .
-drwxr-xr-x 4 runner runner   4096 Oct 14 05:04 ..
--rw-r--r-- 1 runner runner   7392 Oct 14 05:04 llama-bench
--rw-r--r-- 1 runner runner   7472 Oct 14 05:04 llama-perplexity
--rw-r--r-- 1 runner runner   7400 Oct 14 05:04 llama-quantize
--rw-r--r-- 1 runner runner 577240 Oct 14 05:04 llama-tokenize
+drwxr-xr-x 2 runner runner   4096 Oct 14 05:07 .
+drwxr-xr-x 4 runner runner   4096 Oct 14 05:07 ..
+-rw-r--r-- 1 runner runner   7392 Oct 14 05:07 llama-bench
+-rw-r--r-- 1 runner runner   7472 Oct 14 05:07 llama-perplexity
+-rw-r--r-- 1 runner runner   7400 Oct 14 05:07 llama-quantize
+-rw-r--r-- 1 runner runner 577240 Oct 14 05:07 llama-tokenize
 
 ## lib 内容
 total 137884
-drwxr-xr-x 2 runner runner     4096 Oct 14 05:04 .
-drwxr-xr-x 4 runner runner     4096 Oct 14 05:04 ..
--rw-r--r-- 1 runner runner  9290184 Oct 14 05:04 libc++_shared.so
--rw-r--r-- 1 runner runner  7783792 Oct 14 05:04 libggml-base.so
--rw-r--r-- 1 runner runner  4353616 Oct 14 05:04 libggml-cpu.so
--rw-r--r-- 1 runner runner  7412120 Oct 14 05:04 libggml-hexagon.so
--rw-r--r-- 1 runner runner   852040 Oct 14 05:04 libggml-htp-v73.so
--rw-r--r-- 1 runner runner 13517560 Oct 14 05:04 libggml-opencl.so
--rw-r--r-- 1 runner runner   388160 Oct 14 05:04 libggml.so
--rw-r--r-- 1 runner runner  3733368 Oct 14 05:04 libllama-bench-impl.so
--rw-r--r-- 1 runner runner 53490008 Oct 14 05:04 libllama-common.so
--rw-r--r-- 1 runner runner  1622744 Oct 14 05:04 libllama-perplexity-impl.so
--rw-r--r-- 1 runner runner  1011640 Oct 14 05:04 libllama-quantize-impl.so
--rw-r--r-- 1 runner runner 37702736 Oct 14 05:04 libllama.so
+drwxr-xr-x 2 runner runner     4096 Oct 14 05:07 .
+drwxr-xr-x 4 runner runner     4096 Oct 14 05:07 ..
+-rw-r--r-- 1 runner runner  9290184 Oct 14 05:07 libc++_shared.so
+-rw-r--r-- 1 runner runner  7783792 Oct 14 05:07 libggml-base.so
+-rw-r--r-- 1 runner runner  4353616 Oct 14 05:07 libggml-cpu.so
+-rw-r--r-- 1 runner runner  7412120 Oct 14 05:07 libggml-hexagon.so
+-rw-r--r-- 1 runner runner   852040 Oct 14 05:07 libggml-htp-v73.so
+-rw-r--r-- 1 runner runner 13517560 Oct 14 05:07 libggml-opencl.so
+-rw-r--r-- 1 runner runner   388160 Oct 14 05:07 libggml.so
+-rw-r--r-- 1 runner runner  3733368 Oct 14 05:07 libllama-bench-impl.so
+-rw-r--r-- 1 runner runner 53490008 Oct 14 05:07 libllama-common.so
+-rw-r--r-- 1 runner runner  1622744 Oct 14 05:07 libllama-perplexity-impl.so
+-rw-r--r-- 1 runner runner  1011640 Oct 14 05:07 libllama-quantize-impl.so
+-rw-r--r-- 1 runner runner 37702736 Oct 14 05:07 libllama.so
 
 ## 总体积
 136M	dl
